@@ -12,6 +12,7 @@ byte displayMemory[16] = {0};
 byte displayMemoryPortD[16] = {0};
 byte displayMemoryPortB[16] = {0};
 
+// Full display address mapping (only four will be utilized)
 // int displayAddressMapping[16] = {
 //   0x0,
 //   0x2,
@@ -31,7 +32,7 @@ byte displayMemoryPortB[16] = {0};
 //   0xF
 // };
 
-int displayAddressMapping[15] = {
+int displayAddressMapping[4] = {
   0x0,
   0x2,
   0x6,
@@ -54,7 +55,7 @@ byte pinMapper[8][2] = {
   {0, 2},
   {1, 0},
   {0, 4},
-  {3, 0}
+  {1, 5}
 };
 
 byte portDRegisterMapper(byte displayData){
@@ -89,20 +90,24 @@ void receiveEvent(int howMany){
 
   if(command | B00001111 == B00001111){
     byte addressPointer = command & B00001111;
+    boolean colonRegisterUpdate = false;
 
     while(Wire.available()){
       int data = Wire.read();
       Serial.print("Address pointer: ");
       Serial.println(addressPointer);
       displayMemory[addressPointer] = data;
-      
+      Serial.print("Data: ");
+      Serial.println(data, BIN);
       Serial.print("Mapped PORTD: ");
       Serial.println(portDRegisterMapper(data), BIN);
       displayMemoryPortD[addressPointer] = portDRegisterMapper(data);
       Serial.print("Mapped PORTB: ");
       Serial.println(portBRegisterMapper(data), BIN);
       displayMemoryPortB[addressPointer] = portBRegisterMapper(data);
-      
+
+      colonRegisterUpdate = colonRegisterUpdate | addressPointer == 0x04;
+
       //intendedOutput[3 - Wire.available()] = number;
 
       if(addressPointer == 15) {
@@ -110,6 +115,16 @@ void receiveEvent(int howMany){
       }else{
         addressPointer++;
       }
+    }
+
+    if(colonRegisterUpdate && displayMemory[0x04] == B00000010){
+      displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02] | B10000000);
+      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] | B10000000);
+    }else if(colonRegisterUpdate && displayMemory[0x04] == B00000000){
+      displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02]);
+      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
+    }else{
+      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
     }
   }
   Serial.println("-- End --");
@@ -119,17 +134,10 @@ void receiveEvent(int howMany){
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
   DDRD = DDRD | B11111100;
-  pinMode(8, OUTPUT);
+  DDRB = B111111;
 
-  pinMode(9, OUTPUT);
-  pinMode(10, OUTPUT);
-  pinMode(11, OUTPUT);
-  pinMode(12, OUTPUT);
-  digitalWrite(9, HIGH);
-  digitalWrite(10, HIGH);
-  digitalWrite(11, HIGH);
-  digitalWrite(12, HIGH);
-
+  PORTB = B011110;
+  
   //Serial.begin(9600);
   Wire.begin(B11100000);
   Wire.onReceive(receiveEvent);
@@ -157,7 +165,7 @@ void printNumber(byte addressPointer) {
 
 void clearDisplay() {
   PORTD = PORTD & B00000011;
-  PORTB = PORTB & B111110;
+  PORTB = PORTB & B011110;
 }
 
 void clearPixel() {
