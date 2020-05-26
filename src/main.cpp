@@ -1,9 +1,13 @@
 /**
- * Blink
+ * 
+ * Arduino as Display Driver
  *
- * Turns on an LED on for one second,
- * then off for one second, repeatedly.
+ * Modeled after https://www.adafruit.com/product/879
+ * Compatible with https://github.com/adafruit/Adafruit_LED_Backpack
+ * Implemented using https://cdn-shop.adafruit.com/datasheets/ht16K33v110.pdf
+ * 
  */
+
 #include "Arduino.h"
 #include "Wire.h"
 
@@ -38,14 +42,6 @@ int displayAddressMapping[4] = {
   0x6,
   0x8
 };
-
-// void setDisplayAddress(byte address, byte data){
-//   for(int i = 0; i < sizeof(displayAddressMapping); i++){
-//     if(displayAddressMapping[i] == address){
-//       displayMemory[i] = data;
-//     }
-//   }
-// }
 
 byte pinMapper[8][2] = {
   {0, 7},
@@ -88,7 +84,7 @@ void receiveEvent(int howMany){
   Serial.print("Command: ");
   Serial.println(command);
 
-  if(command | B00001111 == B00001111){
+  if((command | B00001111) == B00001111){
     byte addressPointer = command & B00001111;
     boolean colonRegisterUpdate = false;
 
@@ -106,14 +102,12 @@ void receiveEvent(int howMany){
       Serial.println(portBRegisterMapper(data), BIN);
       displayMemoryPortB[addressPointer] = portBRegisterMapper(data);
 
-      colonRegisterUpdate = colonRegisterUpdate | addressPointer == 0x04;
+      if(addressPointer == 0x04){
+        colonRegisterUpdate = true;
+      }
 
-      //intendedOutput[3 - Wire.available()] = number;
-
-      if(addressPointer == 15) {
+      if(addressPointer++ == 0x0F) {
         addressPointer = 0;
-      }else{
-        addressPointer++;
       }
     }
 
@@ -126,35 +120,32 @@ void receiveEvent(int howMany){
     }else{
       displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
     }
+  }else if((command & B11100000) == B11100000){
+    Serial.print("Raw Brightness: ");
+    Serial.println(command & B00001111,BIN);
+    Serial.print("Brightness: ");
+    Serial.println((command & B00001111) * 16,BIN);
+    OCR2A = (command & B00001111) * 16; 
   }
   Serial.println("-- End --");
 }
 
 // the setup function runs once when you press reset or power the board
 void setup() {
-  // initialize digital pin LED_BUILTIN as an output.
   DDRD = DDRD | B11111100;
   DDRB = B111111;
+  DDRC = B111111;
 
   PORTB = B011110;
   
+  TCCR2A = _BV(COM2A1) | _BV(WGM21) | _BV(WGM20);
+  TCCR2B = _BV(CS20);
+  OCR2A = 50;
+
   //Serial.begin(9600);
   Wire.begin(B11100000);
   Wire.onReceive(receiveEvent);
 }
-
-int NUMBERS [10][2] = {
-  {B11101100, B000001},
-  {B01100000, B000000},
-  {B11011100, B000000},
-  {B11111000, B000000},
-  {B01110000, B000001},
-  {B10111000, B000001},
-  {B10111100, B000001},
-  {B11100000, B000000},
-  {B11111100, B000001},
-  {B11111000, B000001}
-};
 
 void printNumber(byte addressPointer) {
   // PORTD = NUMBERS[number][0];
@@ -170,9 +161,11 @@ void clearDisplay() {
 
 void clearPixel() {
   PORTB = PORTB | B011110;
+  PORTC = PORTC & B110000;
 }
 
 int digital [] = {B111101, B111011, B110111, B101111};
+int analog [] = {B001000, B000100, B000010, B000001};
 
 // the loop function runs over and over again forever
 void loop() {
@@ -181,30 +174,13 @@ void loop() {
     for (int n = 0; n < 4; n++) {
       clearDisplay();
       clearPixel();
-      PORTB = PORTB & digital[n];
+      PORTC = PORTC | analog[n];
       printNumber(displayAddressMapping[n]);
     }
   }
   unsigned long postRun = micros();
   unsigned long timeTaken = postRun - preRun;
   //Serial.println(timeTaken);
-  
-  int first = timeTaken / 1000;
-  int second = (timeTaken % 1000) / 100;
-  int third = (timeTaken % 100) / 10;
-  int fourth = timeTaken % 10;
-
-  intendedOutput[0] = first;
-  intendedOutput[1] = second;
-  intendedOutput[2] = third;
-  intendedOutput[3] = fourth;
-
-  if(timeTaken > 9999) {
-    intendedOutput[0] = 0;
-    intendedOutput[1] = 0;
-    intendedOutput[2] = 0;
-    intendedOutput[3] = 0;
-  }
   //Serial.println(micros() - postRun);
   //delay(1000);
 }
