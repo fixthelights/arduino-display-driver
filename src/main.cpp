@@ -11,7 +11,7 @@
 #include "Arduino.h"
 #include "Wire.h"
 
-byte intendedOutput[4] = {2,2,2,6};
+byte intendedOutput[4] = {2, 2, 2, 6};
 byte displayMemory[16] = {0};
 byte displayMemoryPortD[16] = {0};
 byte displayMemoryPortB[16] = {0};
@@ -37,58 +37,68 @@ byte displayMemoryPortB[16] = {0};
 // };
 
 int displayAddressMapping[4] = {
-  0x0,
-  0x2,
-  0x6,
-  0x8
-};
+    0x0,
+    0x2,
+    0x6,
+    0x8};
 
 byte pinMapper[8][2] = {
-  {0, 7},
-  {0, 6},
-  {0, 5},
-  {0, 3},
-  {0, 2},
-  {1, 0},
-  {0, 4},
-  {1, 5}
-};
+    {0, 7},
+    {0, 6},
+    {0, 5},
+    {0, 3},
+    {0, 2},
+    {1, 0},
+    {0, 4},
+    {1, 5}};
 
-byte portDRegisterMapper(byte displayData){
+byte portDRegisterMapper(byte displayData)
+{
   byte result = 0;
-  for(int i = 0; i < 8; i++){
-    bool state = (bool)bitRead(displayData,i);
-    if(state && pinMapper[i][0] == 0){
-      bitSet(result,pinMapper[i][1]);
+  for (int i = 0; i < 8; i++)
+  {
+    bool state = (bool)bitRead(displayData, i);
+    if (state && pinMapper[i][0] == 0)
+    {
+      bitSet(result, pinMapper[i][1]);
     }
   }
   return result;
 }
 
-byte portBRegisterMapper(byte displayData){
+byte portBRegisterMapper(byte displayData)
+{
   byte result = 0;
-  for(int i = 0; i < 8; i++){
-    bool state = (bool)bitRead(displayData,i);
-    if(state && pinMapper[i][0] == 1){
-     bitSet(result,pinMapper[i][1]);
+  for (int i = 0; i < 8; i++)
+  {
+    bool state = (bool)bitRead(displayData, i);
+    if (state && pinMapper[i][0] == 1)
+    {
+      bitSet(result, pinMapper[i][1]);
     }
   }
   return result;
 }
 
-void receiveEvent(int howMany){
+void receiveEvent(int howMany)
+{
   Serial.print("Wire.available(): ");
   Serial.println(Wire.available());
 
   byte command = Wire.read();
+  byte commandValue = command & B11110000;
   Serial.print("Command: ");
   Serial.println(command);
 
-  if((command | B00001111) == B00001111){
+  if (commandValue == B00000000)
+  {
+    // Set display's memory
+
     byte addressPointer = command & B00001111;
     boolean colonRegisterUpdate = false;
 
-    while(Wire.available()){
+    while (Wire.available())
+    {
       int data = Wire.read();
       Serial.print("Address pointer: ");
       Serial.println(addressPointer);
@@ -102,42 +112,56 @@ void receiveEvent(int howMany){
       Serial.println(portBRegisterMapper(data), BIN);
       displayMemoryPortB[addressPointer] = portBRegisterMapper(data);
 
-      if(addressPointer == 0x04){
+      if (addressPointer == 0x04)
+      {
         colonRegisterUpdate = true;
       }
 
-      if(addressPointer++ == 0x0F) {
-        addressPointer = 0;
+      if (addressPointer++ == 0x0F)
+      {
+        addressPointer = 0x00;
       }
     }
 
-    if(colonRegisterUpdate && displayMemory[0x04] == B00000010){
+    // Toggle display's colon based on memory updates
+
+    if (colonRegisterUpdate && displayMemory[0x04] == B00000010)
+    {
       displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02] | B10000000);
       displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] | B10000000);
-    }else if(colonRegisterUpdate && displayMemory[0x04] == B00000000){
+    }
+    else if (colonRegisterUpdate && displayMemory[0x04] == B00000000)
+    {
       displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02]);
       displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
-    }else{
+    }
+    else
+    {
       displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
     }
-  }else if((command & B11100000) == B11100000){
+  }
+  else if (commandValue == B11100000)
+  {
+    // Set display's brightness
+
     Serial.print("Raw Brightness: ");
-    Serial.println(command & B00001111,BIN);
+    Serial.println(command & B00001111, BIN);
     Serial.print("Brightness: ");
-    Serial.println((command & B00001111) * 16,BIN);
-    OCR2A = (command & B00001111) * 16; 
+    Serial.println((command & B00001111) * 16, BIN);
+    OCR2A = (command & B00001111) * 16;
   }
   Serial.println("-- End --");
 }
 
 // the setup function runs once when you press reset or power the board
-void setup() {
+void setup()
+{
   DDRD = DDRD | B11111100;
   DDRB = B111111;
   DDRC = B111111;
 
   PORTB = B011110;
-  
+
   TCCR2A = _BV(COM2A1) | _BV(WGM21) | _BV(WGM20);
   TCCR2B = _BV(CS20);
   OCR2A = 50;
@@ -147,31 +171,37 @@ void setup() {
   Wire.onReceive(receiveEvent);
 }
 
-void printNumber(byte addressPointer) {
+void printNumber(byte addressPointer)
+{
   // PORTD = NUMBERS[number][0];
   // PORTB = PORTB | NUMBERS[number][1];
   PORTD = displayMemoryPortD[addressPointer];
   PORTB = PORTB | displayMemoryPortB[addressPointer];
 }
 
-void clearDisplay() {
+void clearDisplay()
+{
   PORTD = PORTD & B00000011;
   PORTB = PORTB & B011110;
 }
 
-void clearPixel() {
+void clearPixel()
+{
   PORTB = PORTB | B011110;
   PORTC = PORTC & B110000;
 }
 
-int digital [] = {B111101, B111011, B110111, B101111};
-int analog [] = {B001000, B000100, B000010, B000001};
+int digital[] = {B111101, B111011, B110111, B101111};
+int analog[] = {B001000, B000100, B000010, B000001};
 
 // the loop function runs over and over again forever
-void loop() {
+void loop()
+{
   unsigned long preRun = micros();
-  for(int i = 0; i < 1000; i++){
-    for (int n = 0; n < 4; n++) {
+  for (int i = 0; i < 1000; i++)
+  {
+    for (int n = 0; n < 4; n++)
+    {
       clearDisplay();
       clearPixel();
       PORTC = PORTC | analog[n];
