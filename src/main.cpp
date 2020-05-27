@@ -52,29 +52,23 @@ byte pinMapper[8][2] = {
     {0, 4},
     {1, 5}};
 
-byte portDRegisterMapper(byte displayData)
+struct SegmentPorts
 {
-  byte result = 0;
-  for (int i = 0; i < 8; i++)
-  {
-    bool state = (bool)bitRead(displayData, i);
-    if (state && pinMapper[i][0] == 0)
-    {
-      bitSet(result, pinMapper[i][1]);
-    }
-  }
-  return result;
-}
+  byte portB;
+  byte portD;
+};
 
-byte portBRegisterMapper(byte displayData)
-{
-  byte result = 0;
+SegmentPorts registerMapper(byte displayData){
+  SegmentPorts result = {0, 0};
   for (int i = 0; i < 8; i++)
   {
-    bool state = (bool)bitRead(displayData, i);
-    if (state && pinMapper[i][0] == 1)
-    {
-      bitSet(result, pinMapper[i][1]);
+    if(bitRead(displayData, i)){
+      byte portName = pinMapper[i][0];
+      if(portName == 0){
+        bitSet(result.portD, pinMapper[i][1]);
+      }else if(portName == 1){
+        bitSet(result.portB, pinMapper[i][1]);
+      }
     }
   }
   return result;
@@ -95,7 +89,7 @@ void receiveEvent(int howMany)
     // Set display's memory
 
     byte addressPointer = command & B00001111;
-    boolean colonRegisterUpdate = false;
+    bool colonRegisterUpdate = false;
 
     while (Wire.available())
     {
@@ -106,11 +100,12 @@ void receiveEvent(int howMany)
       Serial.print("Data: ");
       Serial.println(data, BIN);
       Serial.print("Mapped PORTD: ");
-      Serial.println(portDRegisterMapper(data), BIN);
-      displayMemoryPortD[addressPointer] = portDRegisterMapper(data);
+      SegmentPorts segPorts = registerMapper(data);
+      Serial.println(segPorts.portD, BIN);
+      displayMemoryPortD[addressPointer] = segPorts.portD;
       Serial.print("Mapped PORTB: ");
-      Serial.println(portBRegisterMapper(data), BIN);
-      displayMemoryPortB[addressPointer] = portBRegisterMapper(data);
+      Serial.println(segPorts.portB, BIN);
+      displayMemoryPortB[addressPointer] = segPorts.portB;
 
       if (addressPointer == 0x04)
       {
@@ -127,17 +122,17 @@ void receiveEvent(int howMany)
 
     if (colonRegisterUpdate && displayMemory[0x04] == B00000010)
     {
-      displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02] | B10000000);
-      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] | B10000000);
+      displayMemoryPortB[0x02] = registerMapper(displayMemory[0x02] | B10000000).portB;
+      displayMemoryPortB[0x06] = registerMapper(displayMemory[0x06] | B10000000).portB;
     }
     else if (colonRegisterUpdate && displayMemory[0x04] == B00000000)
     {
-      displayMemoryPortB[0x02] = portBRegisterMapper(displayMemory[0x02]);
-      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
+      displayMemoryPortB[0x02] = registerMapper(displayMemory[0x02]).portB;
+      displayMemoryPortB[0x06] = registerMapper(displayMemory[0x06] & B01111111).portB;
     }
     else
     {
-      displayMemoryPortB[0x06] = portBRegisterMapper(displayMemory[0x06] & B01111111);
+      displayMemoryPortB[0x06] = registerMapper(displayMemory[0x06] & B01111111).portB;
     }
   }
   else if (commandValue == B11100000)
