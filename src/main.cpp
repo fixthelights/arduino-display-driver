@@ -43,14 +43,14 @@ int displayAddressMapping[4] = {
     0x8};
 
 byte pinMapper[8][2] = {
-    {0, 7},
     {0, 6},
+    {1, 2},
     {0, 5},
-    {0, 3},
-    {0, 2},
-    {1, 0},
     {0, 4},
-    {1, 5}};
+    {1, 3},
+    {0, 2},
+    {0, 3},
+    {1, 0}};
 
 struct SegmentPorts
 {
@@ -76,13 +76,13 @@ SegmentPorts registerMapper(byte displayData){
 
 void receiveEvent(int howMany)
 {
-  Serial.print("Wire.available(): ");
-  Serial.println(Wire.available());
+  // Serial.print("Wire.available(): ");
+  // Serial.println(Wire.available());
 
   byte command = Wire.read();
   byte commandValue = command & B11110000;
-  Serial.print("Command: ");
-  Serial.println(command);
+  // Serial.print("Command: ");
+  // Serial.println(command);
 
   if (commandValue == B00000000)
   {
@@ -94,17 +94,17 @@ void receiveEvent(int howMany)
     while (Wire.available())
     {
       int data = Wire.read();
-      Serial.print("Address pointer: ");
-      Serial.println(addressPointer);
+      // Serial.print("Address pointer: ");
+      // Serial.println(addressPointer);
       displayMemory[addressPointer] = data;
-      Serial.print("Data: ");
-      Serial.println(data, BIN);
-      Serial.print("Mapped PORTD: ");
+      // Serial.print("Data: ");
+      // Serial.println(data, BIN);
+      // Serial.print("Mapped PORTD: ");
       SegmentPorts segPorts = registerMapper(data);
-      Serial.println(segPorts.portD, BIN);
+      // Serial.println(segPorts.portD, BIN);
       displayMemoryPortD[addressPointer] = segPorts.portD;
-      Serial.print("Mapped PORTB: ");
-      Serial.println(segPorts.portB, BIN);
+      // Serial.print("Mapped PORTB: ");
+      // Serial.println(segPorts.portB, BIN);
       displayMemoryPortB[addressPointer] = segPorts.portB;
 
       if (addressPointer == 0x04)
@@ -139,13 +139,13 @@ void receiveEvent(int howMany)
   {
     // Set display's brightness
 
-    Serial.print("Raw Brightness: ");
-    Serial.println(command & B00001111, BIN);
-    Serial.print("Brightness: ");
-    Serial.println((command & B00001111) * 16, BIN);
-    OCR2A = (command & B00001111) * 16;
+    // Serial.print("Raw Brightness: ");
+    // Serial.println(command & B00001111, BIN);
+    // Serial.print("Brightness: ");
+    // Serial.println((command & B00001111) * 16, BIN);
+    OCR1A = (command & B00001111) * 16;
   }
-  Serial.println("-- End --");
+  // Serial.println("-- End --");
 }
 
 // the setup function runs once when you press reset or power the board
@@ -155,57 +155,43 @@ void setup()
   DDRB = B111111;
   DDRC = B111111;
 
-  PORTB = B011110;
+  TCCR1A = _BV(COM1A1) | _BV(WGM12) | _BV(WGM10);
+  TCCR1B = _BV(CS21);
+  OCR1A = 16;
 
-  TCCR2A = _BV(COM2A1) | _BV(WGM21) | _BV(WGM20);
-  TCCR2B = _BV(CS20);
-  OCR2A = 50;
-
-  //Serial.begin(9600);
+  // Serial.begin(9600);
   Wire.begin(B11100000);
   Wire.onReceive(receiveEvent);
 }
 
 void printNumber(byte addressPointer)
 {
-  // PORTD = NUMBERS[number][0];
-  // PORTB = PORTB | NUMBERS[number][1];
-  PORTD = displayMemoryPortD[addressPointer];
+  PORTD = PORTD | displayMemoryPortD[addressPointer];
   PORTB = PORTB | displayMemoryPortB[addressPointer];
 }
 
 void clearDisplay()
 {
-  PORTD = PORTD & B00000011;
-  PORTB = PORTB & B011110;
+  PORTD = PORTD & B10000011;
+  PORTB = PORTB & B110010;
 }
 
 void clearPixel()
 {
-  PORTB = PORTB | B011110;
   PORTC = PORTC & B110000;
 }
 
-int digital[] = {B111101, B111011, B110111, B101111};
-int analog[] = {B001000, B000100, B000010, B000001};
+int analog[] = {B000001, B000010, B000100, B001000};
 
 // the loop function runs over and over again forever
 void loop()
 {
-  unsigned long preRun = micros();
-  for (int i = 0; i < 1000; i++)
-  {
-    for (int n = 0; n < 4; n++)
+  for (int n = 0; n < 4; n++)
     {
       clearDisplay();
       clearPixel();
       PORTC = PORTC | analog[n];
       printNumber(displayAddressMapping[n]);
+      delayMicroseconds(110);
     }
-  }
-  unsigned long postRun = micros();
-  unsigned long timeTaken = postRun - preRun;
-  //Serial.println(timeTaken);
-  //Serial.println(micros() - postRun);
-  //delay(1000);
 }
